@@ -2,15 +2,6 @@
 
 구글 시트 링크를 붙여넣고 **뽑을 범위의 양 끝 모서리를 찍으면** 그 부분만 고화질 PNG로 저장하는 정적 웹페이지입니다.
 
-## 배포 (GitHub Pages)
-
-1. 새 저장소를 만들고 `index.html`을 루트에 올립니다.
-2. 저장소 **Settings → Pages → Build and deployment**에서 Source를 `Deploy from a branch`, 브랜치를 `main` / `/(root)`로 저장합니다.
-3. 잠시 후 `https://oocumu.github.io/export-sheets/`에서 열립니다.
-
-`?url=` 파라미터로 시트 링크를 넘기면 열자마자 불러옵니다.
-예: `https://<아이디>.github.io/<저장소>/?url=https://docs.google.com/spreadsheets/d/.../edit%23gid=0`
-
 ## 두 가지 모드
 
 | | 간편 모드 (키 없음) | 서식 모드 (API 키) |
