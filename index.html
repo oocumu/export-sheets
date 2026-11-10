@@ -1,0 +1,850 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>시트 스냅</title>
+<meta name="description" content="구글 시트 링크를 넣으면 내용이 있는 영역만 찾아 고화질 PNG로 저장합니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f8f6ff; --panel: #ffffff; --ink: #2a2140; --muted: #7a7194; --line: #e7e1f7;
+    --accent: #7c4dff; --accent-hover: #6a3df0; --accent-ink: #ffffff; --soft: #f0eaff;
+    --err: #c62860; --note: #8a5a00; --checker: #f3effd; --field: #fcfbff;
+    --shadow: 0 2px 12px rgba(124, 77, 255, .08);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: var(--ink); background: var(--bg);
+    background-image: radial-gradient(1200px 400px at 50% -120px, #ece4ff 0%, transparent 70%);
+    background-repeat: no-repeat;
+    font: 15px/1.6 "Noto Sans KR", system-ui, -apple-system, sans-serif; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 40px 16px 64px; }
+  header { margin-bottom: 24px; }
+  header h1 { margin: 0 0 4px; font-size: 28px; letter-spacing: -0.02em; }
+  header h1 span { color: var(--accent); }
+  header p { margin: 0; color: var(--muted); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px; margin-bottom: 14px; box-shadow: var(--shadow); }
+  label.cap { display: block; font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .row > input[type=text], .row > input[type=password] { flex: 1 1 280px; min-width: 0; }
+  input[type=text], input[type=password], input[type=number], select {
+    font: inherit; color: var(--ink); background: var(--field); border: 1px solid var(--line);
+    border-radius: 10px; padding: 9px 12px; outline: none; }
+  input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--soft); }
+  button { font: inherit; cursor: pointer; border-radius: 10px; padding: 9px 16px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
+  button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  button:disabled { opacity: .55; cursor: progress; }
+  .sub { margin-top: 12px; }
+  .badge { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--soft); color: var(--accent); }
+  .badge:empty { display: none; }
+  details { margin-top: 14px; border-top: 1px dashed var(--line); padding-top: 12px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+  .hint { color: var(--muted); font-size: 13px; margin: 8px 0 10px; }
+  .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px 20px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: 8px 12px; background: transparent; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: var(--soft); color: var(--accent); font-weight: 700; }
+  .checks { display: flex; flex-direction: column; gap: 6px; }
+  .checks label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+  input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
+  #margin { width: 90px; }
+  #range { width: 100%; }
+  #status { min-height: 24px; margin: 4px 2px 12px; font-size: 14px; color: var(--muted); }
+  #status.err { color: var(--err); }
+  #status.note { color: var(--note); }
+  .bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  #info { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .stage { border-radius: 16px; border: 1px solid var(--line); padding: 16px; overflow: auto; box-shadow: var(--shadow);
+    background-color: var(--panel);
+    background-image: conic-gradient(var(--checker) 25%, transparent 0 50%, var(--checker) 0 75%, transparent 0);
+    background-size: 16px 16px; display: grid; place-items: center; min-height: 200px; }
+  .stage canvas { max-width: 100%; height: auto; box-shadow: 0 2px 10px rgba(60, 30, 140, .15); }
+  footer { margin-top: 28px; font-size: 13px; color: var(--muted); }
+  @media (max-width: 520px) { .wrap { padding-top: 24px; } header h1 { font-size: 24px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>시트 <span>스냅</span></h1>
+    <p>구글 시트 링크를 붙여넣으면 내용이 있는 영역만 찾아서 고화질 PNG로 만들어 줘요.</p>
+  </header>
+
+  <section class="card">
+    <label class="cap" for="url">시트 링크</label>
+    <div class="row">
+      <input id="url" type="text" autocomplete="off" placeholder="https://docs.google.com/spreadsheets/d/…/edit#gid=0">
+      <button id="go" class="primary">불러오기</button>
+    </div>
+    <div class="row sub">
+      <label id="tabWrap" class="row" hidden>탭 <select id="tab"></select></label>
+      <span id="mode" class="badge"></span>
+    </div>
+    <details id="keyBox">
+      <summary>API 키 설정 — 색·테두리·글꼴·병합까지 그대로 뽑으려면</summary>
+      <p class="hint">키가 없으면 <b>간편 모드</b>(값만, 서식 없음)로 동작해요. 키는 이 브라우저에만 저장됩니다. 발급 방법은 README를 참고하세요.</p>
+      <div class="row">
+        <input id="key" type="password" autocomplete="off" placeholder="AIza…">
+        <button id="saveKey">저장</button>
+        <button id="clearKey">지우기</button>
+      </div>
+    </details>
+  </section>
+
+  <section class="card opts">
+    <div>
+      <label class="cap">배율</label>
+      <div class="seg" id="scaleSeg">
+        <button data-v="1">1x</button><button data-v="2" aria-pressed="true">2x</button><button data-v="3">3x</button><button data-v="4">4x</button>
+      </div>
+    </div>
+    <div>
+      <label class="cap">영역 감지 기준</label>
+      <div class="seg" id="detectSeg">
+        <button data-v="format" aria-pressed="true">값 + 서식</button><button data-v="value">값만</button>
+      </div>
+    </div>
+    <div>
+      <label class="cap" for="range">범위 직접 지정</label>
+      <input id="range" type="text" autocomplete="off" placeholder="비우면 자동 (예: B2:H30)">
+    </div>
+    <div>
+      <label class="cap" for="margin">바깥 여백(px)</label>
+      <input id="margin" type="number" min="0" max="200" value="0">
+    </div>
+    <div class="checks">
+      <label class="cap" style="margin:0">표시</label>
+      <label><input id="grid" type="checkbox" checked> 격자선</label>
+      <label><input id="transparent" type="checkbox"> 빈 배경 투명</label>
+    </div>
+  </section>
+
+  <div id="status" role="status"></div>
+
+  <section id="result" hidden>
+    <div class="bar">
+      <span id="info"></span>
+      <div class="row">
+        <button id="copy">클립보드 복사</button>
+        <button id="dl" class="primary">PNG 저장</button>
+      </div>
+    </div>
+    <div class="stage"><canvas id="cv"></canvas></div>
+  </section>
+
+  <footer>공유 설정이 “링크가 있는 모든 사용자 · 뷰어”인 시트만 읽을 수 있어요. 시트 내용은 서버로 보내지 않고 이 브라우저 안에서만 그려집니다.</footer>
+</div>
+
+<script>
+/* ===== 설정 ===== */
+// 사이트 주인이 HTTP 리퍼러로 제한한 키를 여기 넣어두면 방문자는 키 없이 서식 모드를 쓸 수 있어요.
+const DEFAULT_API_KEY = '';
+
+const API = 'https://sheets.googleapis.com/v4/spreadsheets';
+const FIELDS = 'sheets(properties(title,gridProperties),merges,' +
+  'data(rowMetadata(pixelSize,hiddenByUser,hiddenByFilter),columnMetadata(pixelSize,hiddenByUser),' +
+  'rowData(values(formattedValue,effectiveValue,effectiveFormat,dataValidation))))';
+const MAX_SIDE = 16384, MAX_AREA = 100e6;
+const DEFAULT_FONT = { family: 'Arial', px: 10 * 96 / 72, bold: false, italic: false, strike: false, underline: false };
+const PAD = { t: 2, r: 3, b: 2, l: 3 };
+
+/* ===== DOM ===== */
+const $ = (s) => document.querySelector(s);
+const els = {
+  url: $('#url'), go: $('#go'), tab: $('#tab'), tabWrap: $('#tabWrap'), mode: $('#mode'),
+  key: $('#key'), keyBox: $('#keyBox'), status: $('#status'), result: $('#result'), info: $('#info'),
+  cv: $('#cv'), dl: $('#dl'), copy: $('#copy'), range: $('#range'), margin: $('#margin'),
+  grid: $('#grid'), transparent: $('#transparent'),
+};
+const opt = { scale: 2, detect: 'format' };
+let current = null;
+
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+
+function setStatus(msg, kind = '') { els.status.textContent = msg; els.status.className = kind; }
+function busy(on) { els.go.disabled = on; els.tab.disabled = on; els.go.textContent = on ? '불러오는 중…' : '불러오기'; }
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* ===== A1 표기 ===== */
+function colName(c) { let s = ''; c++; while (c > 0) { const m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = Math.floor((c - 1) / 26); } return s; }
+function colIndex(s) { let n = 0; for (const ch of s.toUpperCase()) n = n * 26 + (ch.charCodeAt(0) - 64); return n - 1; }
+function parseA1(str) {
+  const m = str.trim().toUpperCase().replace(/\$/g, '').match(/^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/);
+  if (!m) return null;
+  const a = { r: +m[2] - 1, c: colIndex(m[1]) };
+  const b = m[3] ? { r: +m[4] - 1, c: colIndex(m[3]) } : a;
+  return { r1: Math.min(a.r, b.r), c1: Math.min(a.c, b.c), r2: Math.max(a.r, b.r), c2: Math.max(a.c, b.c) };
+}
+const boxA1 = (b) => `${colName(b.c1)}${b.r1 + 1}:${colName(b.c2)}${b.r2 + 1}`;
+
+function parseUrl(u) {
+  const m = u.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  if (!m) return null;
+  if (m[1] === 'e') return { published: true };
+  const g = u.match(/[#&?]gid=(\d+)/);
+  return { id: m[1], gid: g ? Number(g[1]) : null };
+}
+
+/* ===== 모델 ===== */
+function newModel(rows, cols) {
+  return {
+    rows, cols,
+    rowH: new Array(rows).fill(21), colW: new Array(cols).fill(100),
+    rowHidden: new Array(rows).fill(false), colHidden: new Array(cols).fill(false),
+    cells: Array.from({ length: rows }, () => new Array(cols).fill(null)),
+    merges: [], hideGridlines: false,
+  };
+}
+function buildMergeIndex(m) {
+  m.mIdx = new Int32Array(m.rows * m.cols).fill(-1);
+  m.merges.forEach((g, i) => {
+    for (let r = g.r1; r <= g.r2 && r < m.rows; r++)
+      for (let c = g.c1; c <= g.c2 && c < m.cols; c++) m.mIdx[r * m.cols + c] = i;
+  });
+}
+const mergeOf = (m, r, c) => { const i = m.mIdx[r * m.cols + c]; return i < 0 ? null : m.merges[i]; };
+
+/* ===== 색 ===== */
+function themeMap(theme) {
+  const map = {};
+  (theme?.themeColors || []).forEach((t) => { if (t.color?.rgbColor) map[t.colorType] = t.color.rgbColor; });
+  return map;
+}
+function color(style, legacy, theme) {
+  let c = null;
+  if (style) { if (style.rgbColor) c = style.rgbColor; else if (style.themeColor && theme) c = theme[style.themeColor]; }
+  if (!c && legacy) c = legacy;
+  if (!c) return null;
+  return [c.red || 0, c.green || 0, c.blue || 0, c.alpha ?? 1];
+}
+const rgba = (c) => `rgba(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)},${c[3]})`;
+const isColored = (bg) => !!bg && bg[3] > 0.01 && !(bg[0] > 0.995 && bg[1] > 0.995 && bg[2] > 0.995);
+
+/* ===== Sheets API → 모델 ===== */
+const BORDER_W = { SOLID: 1, DOTTED: 1, DASHED: 1, SOLID_MEDIUM: 2, SOLID_THICK: 3, DOUBLE: 3 };
+function mapBorders(b, theme) {
+  const out = {}; let any = false;
+  for (const side of ['top', 'right', 'bottom', 'left']) {
+    const s = b[side];
+    if (!s || !s.style || s.style === 'NONE') { out[side] = null; continue; }
+    out[side] = { style: s.style, w: BORDER_W[s.style] || 1, color: color(s.colorStyle, s.color, theme) || [0, 0, 0, 1] };
+    any = true;
+  }
+  return any ? out : null;
+}
+function apiCell(v, theme) {
+  if (!v) return null;
+  const f = v.effectiveFormat || {};
+  const tf = f.textFormat || {};
+  const ev = v.effectiveValue || {};
+  const dv = v.dataValidation?.condition;
+  const isBool = dv?.type === 'BOOLEAN';
+  let h = f.horizontalAlignment;
+  if (!h || h === 'HORIZONTAL_ALIGN_UNSPECIFIED') h = isBool || 'boolValue' in ev ? 'CENTER' : ('numberValue' in ev ? 'RIGHT' : 'LEFT');
+  let va = f.verticalAlignment;
+  if (!va || va === 'VERTICAL_ALIGN_UNSPECIFIED') va = 'BOTTOM';
+  let wrap = f.wrapStrategy || 'OVERFLOW_CELL';
+  if (wrap === 'LEGACY_WRAP') wrap = 'WRAP';
+  if (wrap === 'WRAP_STRATEGY_UNSPECIFIED') wrap = 'OVERFLOW_CELL';
+  const p = f.padding || {};
+  let checked = null;
+  if (isBool) checked = ev.boolValue === true || (!!dv.values?.[0] && dv.values[0].userEnteredValue === v.formattedValue);
+  return {
+    text: isBool ? '' : (v.formattedValue ?? ''),
+    checkbox: checked,
+    bg: color(f.backgroundColorStyle, f.backgroundColor, theme),
+    fg: color(tf.foregroundColorStyle, tf.foregroundColor, theme) || [0, 0, 0, 1],
+    font: {
+      family: tf.fontFamily || 'Arial', px: (tf.fontSize || 10) * 96 / 72,
+      bold: !!tf.bold, italic: !!tf.italic, strike: !!tf.strikethrough, underline: !!tf.underline,
+    },
+    h, v: va, wrap,
+    borders: f.borders ? mapBorders(f.borders, theme) : null,
+    pad: { t: p.top ?? PAD.t, r: p.right ?? PAD.r, b: p.bottom ?? PAD.b, l: p.left ?? PAD.l },
+  };
+}
+function fromApi(sheet, theme) {
+  const g = (sheet.data && sheet.data[0]) || {};
+  const rm = g.rowMetadata || [], cm = g.columnMetadata || [], rd = g.rowData || [];
+  let cols = cm.length;
+  for (const row of rd) cols = Math.max(cols, row.values?.length || 0);
+  const rows = Math.max(rm.length, rd.length, 1);
+  cols = Math.max(cols, 1);
+  const m = newModel(rows, cols);
+  for (let r = 0; r < rows; r++) {
+    if (rm[r]) { m.rowH[r] = rm[r].pixelSize ?? 21; m.rowHidden[r] = !!(rm[r].hiddenByUser || rm[r].hiddenByFilter); }
+    const vals = rd[r]?.values;
+    if (vals) for (let c = 0; c < vals.length; c++) m.cells[r][c] = apiCell(vals[c], theme);
+  }
+  for (let c = 0; c < cols; c++) if (cm[c]) { m.colW[c] = cm[c].pixelSize ?? 100; m.colHidden[c] = !!cm[c].hiddenByUser; }
+  m.merges = (sheet.merges || []).map((x) => ({
+    r1: x.startRowIndex || 0, c1: x.startColumnIndex || 0, r2: x.endRowIndex - 1, c2: x.endColumnIndex - 1,
+  }));
+  m.hideGridlines = !!sheet.properties?.gridProperties?.hideGridlines;
+  buildMergeIndex(m);
+  return m;
+}
+
+/* ===== 간편 모드(값만) → 모델 ===== */
+function parseCSV(text) {
+  const rows = []; let row = [], cur = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) {
+      if (ch === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; }
+      else cur += ch;
+    } else if (ch === '"') q = true;
+    else if (ch === ',') { row.push(cur); cur = ''; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      row.push(cur); rows.push(row); row = []; cur = '';
+    } else cur += ch;
+  }
+  if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+  return rows;
+}
+function gvizRows(id, gid) {
+  return new Promise((resolve, reject) => {
+    const cb = '__gviz' + Date.now() + Math.floor(Math.random() * 1e5);
+    const s = document.createElement('script');
+    let finished = false;
+    const timer = setTimeout(() => done(new Error('timeout')), 15000);
+    function done(err, val) {
+      if (finished) return; finished = true;
+      clearTimeout(timer); s.remove();
+      setTimeout(() => { try { delete window[cb]; } catch {} }, 1000);
+      err ? reject(err) : resolve(val);
+    }
+    window[cb] = (resp) => {
+      if (resp.status === 'error') return done(new Error(resp.errors?.[0]?.detailed_message || 'gviz'));
+      const t = resp.table, idx = t.cols.map((col) => colIndex(col.id));
+      const out = t.rows.map((row) => {
+        const arr = [];
+        (row.c || []).forEach((cell, i) => { arr[idx[i]] = cell ? (cell.f ?? (cell.v == null ? '' : String(cell.v))) : ''; });
+        return arr;
+      });
+      done(null, out);
+    };
+    s.onerror = () => done(new Error('load'));
+    s.onload = () => setTimeout(() => done(new Error('private')), 300);
+    s.src = `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=${encodeURIComponent('out:json;responseHandler:' + cb)}&headers=0&gid=${gid}`;
+    document.head.appendChild(s);
+  });
+}
+async function fetchSimple(id, gid) {
+  let rows;
+  try {
+    const res = await fetch(`https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${gid}`);
+    if (!res.ok) throw new Error();
+    const text = await res.text();
+    if (/^\s*<(!doctype|html)/i.test(text)) throw new Error();
+    rows = parseCSV(text);
+  } catch {
+    try { rows = await gvizRows(id, gid); }
+    catch { throw new Error('시트를 읽지 못했어요. 공유 설정이 "링크가 있는 모든 사용자 · 뷰어"인지, 링크의 gid가 맞는지 확인해 주세요.'); }
+  }
+  return fromRows(rows);
+}
+const looksNumeric = (t) => /^[-+(]?[$₩€£¥]?\s?[\d,]*\.?\d+\s?%?\)?$/.test(t.trim());
+function fromRows(rows) {
+  let cols = 1; for (const r of rows) cols = Math.max(cols, r.length);
+  const m = newModel(Math.max(rows.length, 1), cols);
+  const ctx = measureCtx();
+  ctx.font = fontStr(DEFAULT_FONT);
+  const lh = lineHeight(DEFAULT_FONT);
+  const colMax = new Array(cols).fill(0);
+  for (let r = 0; r < rows.length; r++) {
+    let lines = 1;
+    for (let c = 0; c < cols; c++) {
+      const t = rows[r][c] == null ? '' : String(rows[r][c]);
+      if (t === '') continue;
+      m.cells[r][c] = {
+        text: t, checkbox: null, bg: null, fg: [0, 0, 0, 1], font: { ...DEFAULT_FONT },
+        h: looksNumeric(t) ? 'RIGHT' : 'LEFT', v: 'BOTTOM', wrap: 'OVERFLOW_CELL', borders: null, pad: { ...PAD },
+      };
+      const ls = t.split('\n'); lines = Math.max(lines, ls.length);
+      for (const ln of ls) colMax[c] = Math.max(colMax[c], ctx.measureText(ln).width);
+    }
+    m.rowH[r] = Math.max(21, lines * lh + 4);
+  }
+  for (let c = 0; c < cols; c++) m.colW[c] = Math.min(360, Math.max(100, Math.ceil(colMax[c] + 10)));
+  buildMergeIndex(m);
+  return m;
+}
+
+/* ===== 글꼴 ===== */
+const SYSTEM_FONTS = new Set(['arial', 'verdana', 'times new roman', 'courier new', 'georgia', 'trebuchet ms', 'tahoma',
+  'comic sans ms', 'impact', 'calibri', 'cambria', 'helvetica', 'sans-serif', 'serif', 'monospace']);
+const fontLinks = new Map();
+function fontLink(fam) {
+  if (fontLinks.has(fam)) return fontLinks.get(fam);
+  const base = 'https://fonts.googleapis.com/css2?family=' + encodeURIComponent(fam).replace(/%20/g, '+');
+  const p = new Promise((res) => {
+    const l = document.createElement('link'); l.rel = 'stylesheet';
+    l.onload = () => res(true);
+    l.onerror = () => { l.onerror = () => res(false); l.href = base + '&display=swap'; };
+    l.href = base + ':wght@400;700&display=swap';
+    document.head.appendChild(l);
+    setTimeout(() => res(false), 5000);
+  });
+  fontLinks.set(fam, p);
+  return p;
+}
+async function ensureFonts(m) {
+  const chars = new Map();
+  const all = new Set();
+  for (const row of m.cells) for (const cell of row) {
+    if (!cell || !cell.text) continue;
+    let set = chars.get(cell.font.family);
+    if (!set) chars.set(cell.font.family, (set = new Set()));
+    for (const ch of cell.text) { set.add(ch); all.add(ch); }
+  }
+  chars.set('Noto Sans KR', all);
+  const jobs = [];
+  for (const [fam, set] of chars) {
+    if (SYSTEM_FONTS.has(fam.toLowerCase())) continue;
+    jobs.push((async () => {
+      if (fam !== 'Noto Sans KR') await fontLink(fam);
+      const sample = [...set].join('') || 'A';
+      await Promise.all(['400', '700'].map((w) => document.fonts.load(`${w} 16px "${fam}"`, sample).catch(() => {})));
+    })());
+  }
+  await Promise.race([Promise.all(jobs), sleep(8000)]);
+}
+
+/* ===== 측정 ===== */
+let _mctx = null;
+function measureCtx() { if (!_mctx) _mctx = document.createElement('canvas').getContext('2d'); return _mctx; }
+const fontStr = (f) => `${f.italic ? 'italic ' : ''}${f.bold ? 700 : 400} ${f.px}px "${f.family}", "Noto Sans KR", sans-serif`;
+const lineHeight = (f) => Math.round(f.px * 1.25);
+const hasContent = (cell) => !!cell && (cell.text !== '' || cell.checkbox !== null);
+const hasStyle = (cell) => !!cell && (isColored(cell.bg) || !!cell.borders);
+const isEmptyAt = (m, r, c) => !hasContent(m.cells[r][c]) && !mergeOf(m, r, c);
+const colWidth = (m, c) => (m.colHidden[c] ? 0 : m.colW[c]);
+const rowHeight = (m, r) => (m.rowHidden[r] ? 0 : m.rowH[r]);
+
+function textWidth(ctx, cell) {
+  ctx.font = fontStr(cell.font);
+  let w = 0;
+  for (const ln of cell.text.split('\n')) w = Math.max(w, ctx.measureText(ln).width);
+  return w + cell.pad.l + cell.pad.r;
+}
+// 넘침(overflow) 텍스트가 차지하는 열 범위 [L, R]
+function overflowSpan(m, r, c, ctx, lo, hi) {
+  const cell = m.cells[r][c];
+  if (!cell || cell.wrap !== 'OVERFLOW_CELL' || !cell.text || mergeOf(m, r, c)) return [c, c];
+  const own = colWidth(m, c), need = textWidth(ctx, cell);
+  if (need <= own) return [c, c];
+  let L = c, R = c;
+  if (cell.h === 'LEFT') {
+    let tot = own; while (tot < need && R + 1 <= hi && isEmptyAt(m, r, R + 1)) { R++; tot += colWidth(m, R); }
+  } else if (cell.h === 'RIGHT') {
+    let tot = own; while (tot < need && L - 1 >= lo && isEmptyAt(m, r, L - 1)) { L--; tot += colWidth(m, L); }
+  } else {
+    const half = (need - own) / 2; let tl = 0, tr = 0;
+    while (tl < half && L - 1 >= lo && isEmptyAt(m, r, L - 1)) { L--; tl += colWidth(m, L); }
+    while (tr < half && R + 1 <= hi && isEmptyAt(m, r, R + 1)) { R++; tr += colWidth(m, R); }
+  }
+  return [L, R];
+}
+
+/* ===== 영역 자동 감지 ===== */
+function detect(m, mode) {
+  const ctx = measureCtx();
+  let r1 = Infinity, c1 = Infinity, r2 = -1, c2 = -1;
+  const add = (r, c) => { if (r < r1) r1 = r; if (r > r2) r2 = r; if (c < c1) c1 = c; if (c > c2) c2 = c; };
+  for (let r = 0; r < m.rows; r++) {
+    if (m.rowHidden[r]) continue;
+    for (let c = 0; c < m.cols; c++) {
+      if (m.colHidden[c]) continue;
+      const cell = m.cells[r][c];
+      if (hasContent(cell)) {
+        add(r, c);
+        const [L, R] = overflowSpan(m, r, c, ctx, 0, m.cols - 1);
+        add(r, L); add(r, R);
+      } else if (mode === 'format' && hasStyle(cell)) add(r, c);
+    }
+  }
+  if (r2 < 0) return null;
+  return expandMerges(m, { r1, c1, r2, c2 });
+}
+function expandMerges(m, b) {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const g of m.merges) {
+      if (g.r1 <= b.r2 && g.r2 >= b.r1 && g.c1 <= b.c2 && g.c2 >= b.c1) {
+        if (g.r1 < b.r1) { b.r1 = g.r1; changed = true; }
+        if (g.c1 < b.c1) { b.c1 = g.c1; changed = true; }
+        if (g.r2 > b.r2) { b.r2 = g.r2; changed = true; }
+        if (g.c2 > b.c2) { b.c2 = g.c2; changed = true; }
+      }
+    }
+  }
+  b.r2 = Math.min(b.r2, m.rows - 1); b.c2 = Math.min(b.c2, m.cols - 1);
+  return b;
+}
+
+/* ===== 텍스트 줄바꿈 ===== */
+function wrapText(ctx, text, maxW) {
+  const out = [];
+  for (const para of text.split('\n')) {
+    if (para === '') { out.push(''); continue; }
+    let line = '';
+    const tokens = para.match(/\S+\s*|\s+/g) || [];
+    for (const tk of tokens) {
+      if (ctx.measureText(line + tk).width <= maxW) { line += tk; continue; }
+      if (line !== '') { out.push(line.trimEnd()); line = ''; }
+      if (ctx.measureText(tk).width <= maxW) { line = tk; continue; }
+      for (const ch of tk) {   // 한 단어가 칸보다 길면 글자 단위로 자름
+        if (line !== '' && ctx.measureText(line + ch).width > maxW) { out.push(line); line = ch; }
+        else line += ch;
+      }
+    }
+    out.push(line.trimEnd());
+  }
+  return out;
+}
+
+/* ===== 렌더링 ===== */
+function render(m, box, o) {
+  const { r1, c1, r2, c2 } = box;
+  const xs = new Float64Array(m.cols + 1), ys = new Float64Array(m.rows + 1);
+  let acc = 0; for (let c = c1; c <= c2; c++) { xs[c] = acc; acc += colWidth(m, c); } xs[c2 + 1] = acc; const W = acc;
+  acc = 0; for (let r = r1; r <= r2; r++) { ys[r] = acc; acc += rowHeight(m, r); } ys[r2 + 1] = acc; const H = acc;
+  if (W <= 0 || H <= 0) throw new Error('범위 안에 보이는 셀이 없어요.');
+
+  const pad = o.margin, TW = W + pad * 2, TH = H + pad * 2;
+  let s = Math.min(o.scale, MAX_SIDE / TW, MAX_SIDE / TH, Math.sqrt(MAX_AREA / (TW * TH)));
+  s = Math.max(0.1, Math.floor(s * 100) / 100);
+  const cv = els.cv;
+  cv.width = Math.round(TW * s); cv.height = Math.round(TH * s);
+  cv.style.width = TW + 'px';
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(s, 0, 0, s, 0, 0);
+  ctx.clearRect(0, 0, TW, TH);
+  if (!o.transparent) { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, TW, TH); }
+  ctx.translate(pad, pad);
+
+  const rowsV = [], colsV = [];
+  for (let r = r1; r <= r2; r++) if (!m.rowHidden[r]) rowsV.push(r);
+  for (let c = c1; c <= c2; c++) if (!m.colHidden[c]) colsV.push(c);
+  const effCell = (r, c) => { const g = mergeOf(m, r, c); return g ? m.cells[g.r1][g.c1] : m.cells[r][c]; };
+  const filled = (r, c) => isColored(effCell(r, c)?.bg);
+  const rectOf = (ra, ca, rb, cb) => ({ x: xs[ca], y: ys[ra], w: xs[cb] + colWidth(m, cb) - xs[ca], h: ys[rb] + rowHeight(m, rb) - ys[ra] });
+  const anchorRect = (r, c) => {
+    const g = mergeOf(m, r, c);
+    if (!g) return rectOf(r, c, r, c);
+    return rectOf(Math.max(g.r1, r1), Math.max(g.c1, c1), Math.min(g.r2, r2), Math.min(g.c2, c2));
+  };
+  const eachAnchor = (fn) => {
+    const seen = new Set();
+    for (const r of rowsV) for (const c of colsV) {
+      const g = mergeOf(m, r, c);
+      if (g) { if (seen.has(g)) continue; seen.add(g); }
+      fn(r, c, effCell(r, c), anchorRect(r, c), !!g);
+    }
+  };
+
+  // 1) 배경색
+  eachAnchor((r, c, cell, rc) => {
+    if (cell && isColored(cell.bg)) { ctx.fillStyle = rgba(cell.bg); ctx.fillRect(rc.x, rc.y, rc.w, rc.h); }
+  });
+
+  // 2) 격자선 (색칠된 칸과 병합 내부는 제외)
+  if (o.grid && !m.hideGridlines) {
+    ctx.beginPath();
+    for (let i = 0; i < rowsV.length; i++) {
+      const r = rowsV[i], rn = rowsV[i + 1];
+      for (let j = 0; j < colsV.length; j++) {
+        const c = colsV[j], cn = colsV[j + 1];
+        const g = mergeOf(m, r, c), f = filled(r, c);
+        const x0 = xs[c], x1 = x0 + colWidth(m, c), y0 = ys[r], y1 = y0 + rowHeight(m, r);
+        if (!f && !(cn !== undefined && (filled(r, cn) || (g && g === mergeOf(m, r, cn))))) { ctx.moveTo(x1 - 0.5, y0); ctx.lineTo(x1 - 0.5, y1); }
+        if (!f && !(rn !== undefined && (filled(rn, c) || (g && g === mergeOf(m, rn, c))))) { ctx.moveTo(x0, y1 - 0.5); ctx.lineTo(x1, y1 - 0.5); }
+        if (j === 0 && !f) { ctx.moveTo(x0 + 0.5, y0); ctx.lineTo(x0 + 0.5, y1); }
+        if (i === 0 && !f) { ctx.moveTo(x0, y0 + 0.5); ctx.lineTo(x1, y0 + 0.5); }
+      }
+    }
+    ctx.strokeStyle = '#e2e3e3'; ctx.lineWidth = 1; ctx.setLineDash([]); ctx.stroke();
+  }
+
+  // 3) 텍스트 · 체크박스
+  eachAnchor((r, c, cell, rc, merged) => {
+    if (!hasContent(cell)) return;
+    if (cell.checkbox !== null) { drawCheckbox(ctx, cell, rc); return; }
+    ctx.save();
+    ctx.font = fontStr(cell.font);
+    const p = cell.pad, innerW = Math.max(1, rc.w - p.l - p.r);
+    const lines = cell.wrap === 'WRAP' ? wrapText(ctx, cell.text, innerW) : cell.text.split('\n');
+    const clip = { ...rc };
+    if (cell.wrap === 'OVERFLOW_CELL' && !merged) {
+      const [L, R] = overflowSpan(m, r, c, ctx, c1, c2);
+      clip.x = xs[L]; clip.w = xs[R] + colWidth(m, R) - xs[L];
+    }
+    ctx.beginPath(); ctx.rect(clip.x, clip.y, clip.w, clip.h); ctx.clip();
+    const lh = lineHeight(cell.font), total = lines.length * lh;
+    let y = cell.v === 'TOP' ? rc.y + p.t : cell.v === 'MIDDLE' ? rc.y + (rc.h - total) / 2 : rc.y + rc.h - p.b - total;
+    ctx.fillStyle = ctx.strokeStyle = rgba(cell.fg);
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    for (const ln of lines) {
+      const tw = ctx.measureText(ln).width;
+      const x = cell.h === 'RIGHT' ? rc.x + rc.w - p.r - tw : cell.h === 'CENTER' ? rc.x + (rc.w - tw) / 2 : rc.x + p.l;
+      const cy = y + lh / 2;
+      ctx.fillText(ln, x, cy);
+      if (cell.font.underline || cell.font.strike) {
+        ctx.lineWidth = Math.max(1, cell.font.px / 14); ctx.beginPath();
+        if (cell.font.underline) { const uy = cy + cell.font.px * 0.45; ctx.moveTo(x, uy); ctx.lineTo(x + tw, uy); }
+        if (cell.font.strike) { const sy = cy + cell.font.px * 0.05; ctx.moveTo(x, sy); ctx.lineTo(x + tw, sy); }
+        ctx.stroke();
+      }
+      y += lh;
+    }
+    ctx.restore();
+  });
+
+  // 4) 테두리
+  for (let i = 0; i < rowsV.length; i++) {
+    const r = rowsV[i], rp = rowsV[i - 1], rn = rowsV[i + 1];
+    for (let j = 0; j < colsV.length; j++) {
+      const c = colsV[j], cp = colsV[j - 1], cn = colsV[j + 1];
+      const g = mergeOf(m, r, c);
+      const own = m.cells[r][c]?.borders, anc = g ? m.cells[g.r1][g.c1]?.borders : null;
+      if (!own && !anc) continue;
+      const on = {
+        top: !g || rp === undefined || mergeOf(m, rp, c) !== g,
+        bottom: !g || rn === undefined || mergeOf(m, rn, c) !== g,
+        left: !g || cp === undefined || mergeOf(m, r, cp) !== g,
+        right: !g || cn === undefined || mergeOf(m, r, cn) !== g,
+      };
+      const outer = { top: i === 0, bottom: rn === undefined, left: j === 0, right: cn === undefined };
+      const x0 = xs[c], x1 = x0 + colWidth(m, c), y0 = ys[r], y1 = y0 + rowHeight(m, r);
+      for (const side of ['top', 'right', 'bottom', 'left']) {
+        if (!on[side]) continue;
+        const b = (own && own[side]) || (anc && anc[side]);
+        if (b) drawBorder(ctx, b, side, x0, y0, x1, y1, outer[side]);
+      }
+    }
+  }
+  return { W: cv.width, H: cv.height, scale: s };
+}
+
+function drawBorder(ctx, b, side, x0, y0, x1, y1, outer) {
+  const horiz = side === 'top' || side === 'bottom';
+  const base = side === 'top' ? y0 : side === 'bottom' ? y1 : side === 'left' ? x0 : x1;
+  const inward = side === 'top' || side === 'left' ? 1 : -1;
+  const pos = outer ? base + inward * b.w / 2 : base + (b.w % 2 ? -0.5 : 0);
+  const solid = b.style.startsWith('SOLID');
+  const ext = solid ? b.w / 2 : 0;
+  const a0 = (horiz ? x0 : y0) - ext, a1 = (horiz ? x1 : y1) + ext;
+  ctx.save();
+  ctx.strokeStyle = rgba(b.color);
+  ctx.setLineDash(b.style === 'DOTTED' ? [1, 2] : b.style === 'DASHED' ? [4, 3] : []);
+  const line = (p, w) => {
+    ctx.lineWidth = w; ctx.beginPath();
+    if (horiz) { ctx.moveTo(a0, p); ctx.lineTo(a1, p); } else { ctx.moveTo(p, a0); ctx.lineTo(p, a1); }
+    ctx.stroke();
+  };
+  if (b.style === 'DOUBLE') { line(pos - 1, 1); line(pos + 1, 1); }
+  else line(pos, b.w);
+  ctx.restore();
+}
+
+function drawCheckbox(ctx, cell, rc) {
+  const size = Math.min(14, rc.h - 4, rc.w - 4);
+  if (size < 4) return;
+  const p = cell.pad;
+  const x = cell.h === 'LEFT' ? rc.x + p.l : cell.h === 'RIGHT' ? rc.x + rc.w - p.r - size : rc.x + (rc.w - size) / 2;
+  const y = cell.v === 'TOP' ? rc.y + p.t + 1 : cell.v === 'BOTTOM' ? rc.y + rc.h - p.b - size - 1 : rc.y + (rc.h - size) / 2;
+  const fg = cell.fg[0] + cell.fg[1] + cell.fg[2] < 0.05 ? '#5f6368' : rgba(cell.fg);
+  const rr = 2;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y); ctx.lineTo(x + size - rr, y); ctx.quadraticCurveTo(x + size, y, x + size, y + rr);
+  ctx.lineTo(x + size, y + size - rr); ctx.quadraticCurveTo(x + size, y + size, x + size - rr, y + size);
+  ctx.lineTo(x + rr, y + size); ctx.quadraticCurveTo(x, y + size, x, y + size - rr);
+  ctx.lineTo(x, y + rr); ctx.quadraticCurveTo(x, y, x + rr, y); ctx.closePath();
+  if (cell.checkbox) {
+    ctx.fillStyle = fg; ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.8; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x + size * 0.22, y + size * 0.52); ctx.lineTo(x + size * 0.42, y + size * 0.72); ctx.lineTo(x + size * 0.78, y + size * 0.3);
+    ctx.stroke();
+  } else {
+    ctx.strokeStyle = fg; ctx.lineWidth = 1.6;
+    ctx.translate(0.8, 0.8); ctx.scale((size - 1.6) / size, (size - 1.6) / size);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* ===== 흐름 ===== */
+async function api(url) {
+  const res = await fetch(url);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(apiError(res.status, data.error?.message || res.statusText));
+  return data;
+}
+function apiError(status, msg) {
+  if (status === 403 && /has not been used|is disabled/i.test(msg)) return 'Google Cloud 프로젝트에서 Google Sheets API가 사용 설정되어 있지 않아요.';
+  if (status === 403 && /referer|referrer/i.test(msg)) return 'API 키의 웹사이트 제한(HTTP 리퍼러)에 이 사이트 주소가 등록되어 있지 않아요.';
+  if (status === 403) return '시트를 읽을 권한이 없어요. 공유 설정을 "링크가 있는 모든 사용자 · 뷰어"로 바꿔 주세요.';
+  if (status === 400 && /api key/i.test(msg)) return 'API 키가 올바르지 않아요.';
+  if (status === 404) return '시트를 찾을 수 없어요. 링크를 확인해 주세요.';
+  if (status === 429) return '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.';
+  return `불러오기 실패 (${status}): ${msg}`;
+}
+const apiKey = () => els.key.value.trim() || DEFAULT_API_KEY;
+
+async function load() {
+  const p = parseUrl(els.url.value.trim());
+  if (!p) { setStatus('구글 시트 링크 형식이 아니에요. 주소창의 …/spreadsheets/d/…/edit 링크를 넣어 주세요.', 'err'); return; }
+  if (p.published) { setStatus('"웹에 게시" 링크(/d/e/…)는 지원하지 않아요. 브라우저 주소창의 편집 링크를 넣어 주세요.', 'err'); return; }
+  busy(true);
+  try {
+    const key = apiKey();
+    if (key) {
+      setStatus('시트 정보를 불러오는 중…');
+      const meta = await api(`${API}/${p.id}?fields=${encodeURIComponent('properties(title,spreadsheetTheme),sheets(properties(sheetId,title,index))')}&key=${encodeURIComponent(key)}`);
+      current = { id: p.id, key, mode: 'api', title: meta.properties.title, theme: themeMap(meta.properties.spreadsheetTheme), sheets: meta.sheets };
+      els.tab.innerHTML = '';
+      for (const sh of meta.sheets) {
+        const o = document.createElement('option');
+        o.value = String(sh.properties.sheetId); o.textContent = sh.properties.title;
+        els.tab.appendChild(o);
+      }
+      const pick = meta.sheets.find((s) => s.properties.sheetId === p.gid) || meta.sheets[0];
+      els.tab.value = String(pick.properties.sheetId);
+      els.tabWrap.hidden = false;
+      els.mode.textContent = '서식 모드';
+      await loadSheet(pick.properties.sheetId);
+    } else {
+      els.tabWrap.hidden = true;
+      setStatus('시트를 불러오는 중… (간편 모드)');
+      const gid = p.gid ?? 0;
+      const model = await fetchSimple(p.id, gid);
+      current = { id: p.id, mode: 'simple', title: 'sheet', sheetTitle: 'sheet_' + gid, model };
+      els.mode.textContent = '간편 모드';
+      await ensureFonts(model);
+      draw();
+    }
+  } catch (e) {
+    setStatus(e.message || String(e), 'err');
+  } finally { busy(false); }
+}
+
+async function loadSheet(sheetId) {
+  const sh = current.sheets.find((s) => s.properties.sheetId === sheetId);
+  const title = sh.properties.title;
+  setStatus(`'${title}' 탭을 불러오는 중…`);
+  const range = "'" + title.replace(/'/g, "''") + "'";
+  const data = await api(`${API}/${current.id}?ranges=${encodeURIComponent(range)}&includeGridData=true&fields=${encodeURIComponent(FIELDS)}&key=${encodeURIComponent(current.key)}`);
+  current.sheetTitle = title;
+  current.model = fromApi(data.sheets[0], current.theme);
+  setStatus('글꼴을 불러오는 중…');
+  await ensureFonts(current.model);
+  draw();
+}
+
+function draw() {
+  if (!current?.model) return;
+  const m = current.model;
+  const manual = els.range.value.trim();
+  let box;
+  if (manual) {
+    box = parseA1(manual);
+    if (!box) { setStatus('범위 형식이 올바르지 않아요. 예: A1:F20', 'err'); return; }
+    box.r2 = Math.min(box.r2, m.rows - 1); box.c2 = Math.min(box.c2, m.cols - 1);
+    if (box.r1 > box.r2 || box.c1 > box.c2) { setStatus('지정한 범위가 시트 밖이에요.', 'err'); return; }
+  } else {
+    box = detect(m, opt.detect);
+    if (!box) { els.result.hidden = true; setStatus('내용이 있는 셀을 찾지 못했어요.', 'err'); return; }
+  }
+  current.box = box;
+  let res;
+  try {
+    res = render(m, box, {
+      scale: opt.scale, margin: Math.max(0, Math.min(200, Number(els.margin.value) || 0)),
+      grid: els.grid.checked, transparent: els.transparent.checked,
+    });
+  } catch (e) { setStatus(e.message, 'err'); return; }
+  els.result.hidden = false;
+  const reduced = res.scale < opt.scale;
+  els.info.textContent = `${manual ? '지정' : '감지'} 범위 ${boxA1(box)} · ${res.W.toLocaleString()} × ${res.H.toLocaleString()}px · ${reduced ? `크기 제한으로 ${res.scale}배` : opt.scale + '배'}`;
+  if (current.mode === 'simple') setStatus('간편 모드: 값만 가져와서 색·테두리·글꼴·병합은 빠져 있어요. API 키를 넣으면 서식까지 그대로 나와요.', 'note');
+  else setStatus('');
+}
+
+function toBlob() {
+  return new Promise((res, rej) => els.cv.toBlob((b) => (b ? res(b) : rej(new Error('이미지가 너무 커서 이 브라우저에서 만들 수 없어요. 배율을 낮춰 주세요.'))), 'image/png'));
+}
+function fileName() {
+  const name = `${current.sheetTitle}_${boxA1(current.box).replace(':', '-')}`.replace(/[\\/:*?"<>|]+/g, '_');
+  return name + '.png';
+}
+
+/* ===== 이벤트 ===== */
+els.go.addEventListener('click', load);
+els.url.addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
+els.url.addEventListener('paste', () => setTimeout(() => { if (parseUrl(els.url.value)) load(); }, 0));
+els.tab.addEventListener('change', async () => {
+  busy(true);
+  try { await loadSheet(Number(els.tab.value)); } catch (e) { setStatus(e.message, 'err'); } finally { busy(false); }
+});
+function segment(id, key, parse) {
+  const seg = $(id);
+  seg.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    seg.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    opt[key] = parse(b.dataset.v); draw();
+  });
+}
+segment('#scaleSeg', 'scale', Number);
+segment('#detectSeg', 'detect', String);
+els.range.addEventListener('change', draw);
+els.margin.addEventListener('input', draw);
+els.grid.addEventListener('change', draw);
+els.transparent.addEventListener('change', draw);
+
+$('#saveKey').addEventListener('click', () => {
+  const k = els.key.value.trim();
+  if (k) { store.set('sheetSnap.key', k); setStatus('API 키를 이 브라우저에 저장했어요. 다시 불러오면 서식 모드로 동작해요.'); }
+});
+$('#clearKey').addEventListener('click', () => { store.del('sheetSnap.key'); els.key.value = ''; setStatus('저장된 API 키를 지웠어요.'); });
+
+els.dl.addEventListener('click', async () => {
+  try {
+    const b = await toBlob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b); a.download = fileName();
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  } catch (e) { setStatus(e.message, 'err'); }
+});
+els.copy.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': toBlob() })]);
+    const t = els.copy.textContent; els.copy.textContent = '복사했어요 ✓';
+    setTimeout(() => { els.copy.textContent = t; }, 1500);
+  } catch { setStatus('이 브라우저에서는 이미지 복사가 안 돼요. PNG 저장을 이용해 주세요.', 'err'); }
+});
+
+/* ===== 초기화 ===== */
+els.key.value = store.get('sheetSnap.key') || '';
+if (DEFAULT_API_KEY) $('#keyBox summary').textContent = 'API 키 설정 — 사이트 기본 키 사용 중 (직접 입력하면 그 키를 우선 사용)';
+const q = new URLSearchParams(location.search).get('url');
+if (q) { els.url.value = q; load(); }
+</script>
+</body>
+</html>
