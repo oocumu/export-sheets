@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>시트 스냅</title>
-<meta name="description" content="구글 시트 링크를 넣으면 내용이 있는 영역만 찾아 고화질 PNG로 저장합니다.">
+<meta name="description" content="구글 시트에서 모서리 두 칸을 찍어 그 범위를 고화질 PNG로 저장합니다.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
@@ -55,7 +55,24 @@
   .checks label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
   input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
   #margin { width: 90px; }
-  #range { width: 100%; }
+  .corners { display: flex; gap: 12px 16px; flex-wrap: wrap; align-items: flex-end; }
+  .corner { flex: 1 1 150px; min-width: 0; }
+  .corner input { width: 100%; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 16px; letter-spacing: .03em; }
+  .corner-btns { flex: 0 0 auto; }
+  .pin { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%;
+    font-size: 11px; color: #fff; margin-right: 2px; vertical-align: 1px; }
+  .pin.p1, .mark.p1 { background: #7c4dff; }
+  .pin.p2, .mark.p2 { background: #e0457b; }
+  .pickStage { border: 1px solid var(--line); border-radius: 12px; overflow: auto; max-height: 70vh; background: #fff; }
+  .pickWrap { position: relative; display: inline-block; line-height: 0; cursor: crosshair; user-select: none; -webkit-user-select: none; }
+  .pickWrap canvas { display: block; }
+  #sel { position: absolute; pointer-events: none; border: 2px solid #7c4dff; background: rgba(124, 77, 255, .12);
+    box-shadow: 0 0 0 9999px rgba(42, 33, 64, .18); }
+  .mark { position: absolute; pointer-events: none; width: 18px; height: 18px; border-radius: 50%; color: #fff;
+    font: 700 11px/18px "Noto Sans KR", sans-serif; text-align: center; transform: translate(-50%, -50%);
+    box-shadow: 0 0 0 2px #fff; }
+  #hoverTip { position: absolute; pointer-events: none; background: var(--ink); color: #fff; border-radius: 6px;
+    font: 700 12px/1 ui-monospace, Menlo, monospace; padding: 5px 7px; white-space: nowrap; }
   #status { min-height: 24px; margin: 4px 2px 12px; font-size: 14px; color: var(--muted); }
   #status.err { color: var(--err); }
   #status.note { color: var(--note); }
@@ -74,7 +91,7 @@
 <div class="wrap">
   <header>
     <h1>시트 <span>스냅</span></h1>
-    <p>구글 시트 링크를 붙여넣으면 내용이 있는 영역만 찾아서 고화질 PNG로 만들어 줘요.</p>
+    <p>구글 시트 링크를 붙여넣고 양 끝 모서리 두 칸을 찍으면, 그 부분만 고화질 PNG로 만들어 줘요.</p>
   </header>
 
   <section class="card">
@@ -98,22 +115,40 @@
     </details>
   </section>
 
+  <section class="card" id="pickCard" hidden>
+    <div class="corners">
+      <div class="corner">
+        <label class="cap" for="p1"><span class="pin p1">1</span> 1번 모서리</label>
+        <input id="p1" type="text" autocomplete="off" spellcheck="false" placeholder="예: B 3">
+      </div>
+      <div class="corner">
+        <label class="cap" for="p2"><span class="pin p2">2</span> 2번 모서리</label>
+        <input id="p2" type="text" autocomplete="off" spellcheck="false" placeholder="예: I 23">
+      </div>
+      <div class="row corner-btns">
+        <button id="autoPick" title="내용이 있는 곳을 기준으로 추정해서 찍어요">자동으로 찍기</button>
+        <button id="clearPick">지우기</button>
+      </div>
+    </div>
+    <p class="hint">아래 시트에서 <b>좌클릭 = 1번</b>, <b>우클릭 = 2번</b> 모서리예요. 휴대폰에서는 탭할 때마다 1번 → 2번 순서로 찍혀요.</p>
+    <div class="pickStage" id="pickStage">
+      <div class="pickWrap" id="pickWrap">
+        <canvas id="pick"></canvas>
+        <div id="sel" hidden></div>
+        <div class="mark p1" id="m1" hidden>1</div>
+        <div class="mark p2" id="m2" hidden>2</div>
+        <div id="hoverTip" hidden></div>
+      </div>
+    </div>
+    <p class="hint" id="pickNote" hidden></p>
+  </section>
+
   <section class="card opts">
     <div>
       <label class="cap">배율</label>
       <div class="seg" id="scaleSeg">
         <button data-v="1">1x</button><button data-v="2" aria-pressed="true">2x</button><button data-v="3">3x</button><button data-v="4">4x</button>
       </div>
-    </div>
-    <div>
-      <label class="cap">영역 감지 기준</label>
-      <div class="seg" id="detectSeg">
-        <button data-v="format" aria-pressed="true">값 + 서식</button><button data-v="value">값만</button>
-      </div>
-    </div>
-    <div>
-      <label class="cap" for="range">범위 직접 지정</label>
-      <input id="range" type="text" autocomplete="off" placeholder="비우면 자동 (예: B2:H30)">
     </div>
     <div>
       <label class="cap" for="margin">바깥 여백(px)</label>
@@ -160,10 +195,17 @@ const $ = (s) => document.querySelector(s);
 const els = {
   url: $('#url'), go: $('#go'), tab: $('#tab'), tabWrap: $('#tabWrap'), mode: $('#mode'),
   key: $('#key'), keyBox: $('#keyBox'), status: $('#status'), result: $('#result'), info: $('#info'),
-  cv: $('#cv'), dl: $('#dl'), copy: $('#copy'), range: $('#range'), margin: $('#margin'),
+  cv: $('#cv'), dl: $('#dl'), copy: $('#copy'), margin: $('#margin'),
+  pickCard: $('#pickCard'), p1: $('#p1'), p2: $('#p2'), pick: $('#pick'), pickWrap: $('#pickWrap'),
+  sel: $('#sel'), m1: $('#m1'), m2: $('#m2'), hoverTip: $('#hoverTip'), pickNote: $('#pickNote'),
   grid: $('#grid'), transparent: $('#transparent'),
 };
-const opt = { scale: 2, detect: 'format' };
+const opt = { scale: 2, detect: 'smart' };
+const FRAME_CAP = 6; // 자동으로 찍기: 내용 밖으로 틀을 찾아볼 최대 칸 수
+const HEAD_W = 44, HEAD_H = 22;            // 미리보기 머리글 크기
+const PICK_MAX_ROWS = 400, PICK_MAX_COLS = 80;
+const corners = { p1: null, p2: null };   // {r, c}
+let pickLayout = null, nextTouch = 'p1';
 let current = null;
 
 const store = {
@@ -461,6 +503,67 @@ function overflowSpan(m, r, c, ctx, lo, hi) {
 
 /* ===== 영역 자동 감지 ===== */
 function detect(m, mode) {
+  if (mode === 'smart') {
+    const core = detectRaw(m, 'value');
+    return core ? smartExpand(m, core) : detectRaw(m, 'format');
+  }
+  return detectRaw(m, mode);
+}
+
+// 내용 영역 바깥 한 줄(행 또는 열)의 서식 정보
+function lineInfo(m, dir, idx, a, b) {
+  const vertical = dir === 'top' || dir === 'bottom';
+  const perp = vertical ? ['left', 'right'] : ['top', 'bottom'];
+  let border = false; const fills = new Set();
+  for (let i = a; i <= b; i++) {
+    if (vertical ? m.colHidden[i] : m.rowHidden[i]) continue;
+    const cell = vertical ? m.cells[idx][i] : m.cells[i][idx];
+    if (!cell) continue;
+    const bd = cell.borders;
+    // 내용 쪽을 향한 테두리만 있는 줄은 이미 그려지는 선이라 틀로 치지 않음
+    if (bd && (bd[dir] || bd[perp[0]] || bd[perp[1]])) border = true;
+    if (isColored(cell.bg)) fills.add(rgba(cell.bg));
+  }
+  return { border, fill: fills.size ? [...fills].sort().join('|') : null };
+}
+
+// 내용 영역에서 바깥으로 최대 FRAME_CAP칸까지만 보고, 거기서 끝나는 테두리·색 틀만 포함.
+// 시트 끝까지 계속 이어지는 배경색·테두리는 장식 배경으로 보고 제외.
+function smartExpand(m, box) {
+  const b = { ...box };
+  for (const dir of ['top', 'bottom', 'left', 'right']) {
+    const vertical = dir === 'top' || dir === 'bottom';
+    const step = dir === 'top' || dir === 'left' ? -1 : 1;
+    const limit = vertical ? m.rows : m.cols;
+    const hidden = vertical ? m.rowHidden : m.colHidden;
+    let pos = dir === 'top' ? b.r1 : dir === 'bottom' ? b.r2 : dir === 'left' ? b.c1 : b.c2;
+    const lines = [];
+    while (lines.length < FRAME_CAP + 1) {
+      pos += step;
+      if (pos < 0 || pos >= limit) break;
+      if (hidden[pos]) continue;
+      const info = vertical ? lineInfo(m, dir, pos, b.c1, b.c2) : lineInfo(m, dir, pos, b.r1, b.r2);
+      lines.push({ pos, ...info });
+    }
+    let ext = 0;
+    for (let k = 0; k < Math.min(FRAME_CAP, lines.length); k++) if (lines[k].border) ext = k + 1;
+    // 빈 칸을 건너 처음 나오는 색 띠가 FRAME_CAP 안에서 끝나면 틀로 보고 포함
+    const s = lines.findIndex((l, k) => k < FRAME_CAP && l.fill !== null);
+    if (s >= 0) {
+      let end = s + 1;
+      while (end < lines.length && lines[end].fill === lines[s].fill) end++;
+      if (end < lines.length && end <= FRAME_CAP) ext = Math.max(ext, end);
+    }
+    if (ext > 0) {
+      const edge = lines[ext - 1].pos;
+      if (dir === 'top') b.r1 = edge; else if (dir === 'bottom') b.r2 = edge;
+      else if (dir === 'left') b.c1 = edge; else b.c2 = edge;
+    }
+  }
+  return expandMerges(m, b);
+}
+
+function detectRaw(m, mode) {
   const ctx = measureCtx();
   let r1 = Infinity, c1 = Infinity, r2 = -1, c2 = -1;
   const add = (r, c) => { if (r < r1) r1 = r; if (r > r2) r2 = r; if (c < c1) c1 = c; if (c > c2) c2 = c; };
@@ -525,17 +628,18 @@ function render(m, box, o) {
   acc = 0; for (let r = r1; r <= r2; r++) { ys[r] = acc; acc += rowHeight(m, r); } ys[r2 + 1] = acc; const H = acc;
   if (W <= 0 || H <= 0) throw new Error('범위 안에 보이는 셀이 없어요.');
 
-  const pad = o.margin, TW = W + pad * 2, TH = H + pad * 2;
+  const pad = o.margin || 0, HX = o.headers ? HEAD_W : 0, HY = o.headers ? HEAD_H : 0;
+  const offX = pad + HX, offY = pad + HY, TW = W + offX + pad, TH = H + offY + pad;
   let s = Math.min(o.scale, MAX_SIDE / TW, MAX_SIDE / TH, Math.sqrt(MAX_AREA / (TW * TH)));
   s = Math.max(0.1, Math.floor(s * 100) / 100);
-  const cv = els.cv;
+  const cv = o.canvas || els.cv;
   cv.width = Math.round(TW * s); cv.height = Math.round(TH * s);
-  cv.style.width = TW + 'px';
+  cv.style.width = TW + 'px'; cv.style.height = TH + 'px';
   const ctx = cv.getContext('2d');
   ctx.setTransform(s, 0, 0, s, 0, 0);
   ctx.clearRect(0, 0, TW, TH);
   if (!o.transparent) { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, TW, TH); }
-  ctx.translate(pad, pad);
+  ctx.translate(offX, offY);
 
   const rowsV = [], colsV = [];
   for (let r = r1; r <= r2; r++) if (!m.rowHidden[r]) rowsV.push(r);
@@ -637,7 +741,30 @@ function render(m, box, o) {
       }
     }
   }
-  return { W: cv.width, H: cv.height, scale: s };
+
+  // 5) 행·열 머리글 (모서리 찍기용 미리보기에서만)
+  if (o.headers) {
+    ctx.save();
+    ctx.fillStyle = '#f6f4fc';
+    ctx.fillRect(-HX, -HY, W + HX, HY); ctx.fillRect(-HX, 0, HX, H);
+    ctx.font = '500 11px "Noto Sans KR", sans-serif'; ctx.fillStyle = '#5b5375';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.strokeStyle = '#ddd6ee'; ctx.lineWidth = 1; ctx.beginPath();
+    for (const c of colsV) {
+      const w = colWidth(m, c);
+      if (w >= 14) ctx.fillText(colName(c), xs[c] + w / 2, -HY / 2);
+      ctx.moveTo(xs[c] + w - 0.5, -HY); ctx.lineTo(xs[c] + w - 0.5, 0);
+    }
+    for (const r of rowsV) {
+      const h = rowHeight(m, r);
+      if (h >= 10) ctx.fillText(String(r + 1), -HX / 2, ys[r] + h / 2);
+      ctx.moveTo(-HX, ys[r] + h - 0.5); ctx.lineTo(0, ys[r] + h - 0.5);
+    }
+    ctx.moveTo(-HX, -0.5); ctx.lineTo(W, -0.5); ctx.moveTo(-0.5, -HY); ctx.lineTo(-0.5, H);
+    ctx.stroke();
+    ctx.restore();
+  }
+  return { W: cv.width, H: cv.height, scale: s, xs, ys, offX, offY, rowsV, colsV };
 }
 
 function drawBorder(ctx, b, side, x0, y0, x1, y1, outer) {
@@ -737,6 +864,7 @@ async function load() {
       current = { id: p.id, mode: 'simple', title: 'sheet', sheetTitle: 'sheet_' + gid, model };
       els.mode.textContent = '간편 모드';
       await ensureFonts(model);
+      renderPicker();
       draw();
     }
   } catch (e) {
@@ -754,23 +882,106 @@ async function loadSheet(sheetId) {
   current.model = fromApi(data.sheets[0], current.theme);
   setStatus('글꼴을 불러오는 중…');
   await ensureFonts(current.model);
+  renderPicker();
+  draw();
+}
+
+/* ===== 모서리 찍기 ===== */
+// "I 23", "i23", "I,23", "$I$23" 모두 허용
+function parseCell(str) {
+  const mt = String(str).trim().toUpperCase().replace(/\$/g, '').match(/^([A-Z]{1,3})\s*[,\s]?\s*(\d{1,6})$/);
+  if (!mt || +mt[2] < 1) return null;
+  return { r: +mt[2] - 1, c: colIndex(mt[1]) };
+}
+const cellName = (p) => `${colName(p.c)} ${p.r + 1}`;
+
+function renderPicker() {
+  const m = current.model;
+  const ext = detectRaw(m, 'format');
+  let r2 = ext ? ext.r2 + 3 : 20, c2 = ext ? ext.c2 + 2 : 10;
+  for (const k of ['p1', 'p2']) if (corners[k]) { r2 = Math.max(r2, corners[k].r + 2); c2 = Math.max(c2, corners[k].c + 2); }
+  r2 = Math.min(r2, m.rows - 1, PICK_MAX_ROWS - 1);
+  c2 = Math.min(c2, m.cols - 1, PICK_MAX_COLS - 1);
+  const cut = (ext && (ext.r2 > r2 || ext.c2 > c2));
+  els.pickNote.hidden = !cut;
+  if (cut) els.pickNote.textContent = `미리보기는 ${colName(c2)}${r2 + 1}까지만 보여요. 그 밖은 칸 이름을 직접 입력해 주세요.`;
+  els.pickCard.hidden = false;
+  pickLayout = render(m, { r1: 0, c1: 0, r2, c2 }, {
+    canvas: els.pick, headers: true, grid: true, transparent: false,
+    scale: Math.min(2, Math.max(1, window.devicePixelRatio || 1)),
+  });
+  pickLayout.r2 = r2; pickLayout.c2 = c2;
+  updateSelection();
+}
+
+function cellAt(e) {
+  if (!pickLayout) return null;
+  const rect = els.pick.getBoundingClientRect();
+  const k = parseFloat(els.pick.style.width) / rect.width;
+  const x = (e.clientX - rect.left) * k - pickLayout.offX, y = (e.clientY - rect.top) * k - pickLayout.offY;
+  if (x < 0 || y < 0) return null;
+  const m = current.model;
+  let c = null, r = null;
+  for (const cc of pickLayout.colsV) if (x >= pickLayout.xs[cc] && x < pickLayout.xs[cc] + colWidth(m, cc)) { c = cc; break; }
+  for (const rr of pickLayout.rowsV) if (y >= pickLayout.ys[rr] && y < pickLayout.ys[rr] + rowHeight(m, rr)) { r = rr; break; }
+  return r === null || c === null ? null : { r, c };
+}
+// 미리보기 안의 칸 좌표(css px). 미리보기 밖이면 null
+function cellRect(p) {
+  const L = pickLayout, m = current.model;
+  if (!L || p.r > L.r2 || p.c > L.c2) return null;
+  return { x: L.offX + L.xs[p.c], y: L.offY + L.ys[p.r], w: colWidth(m, p.c), h: rowHeight(m, p.r) };
+}
+
+function updateSelection() {
+  for (const [k, mk] of [['p1', els.m1], ['p2', els.m2]]) {
+    const rc = corners[k] && cellRect(corners[k]);
+    mk.hidden = !rc;
+    if (rc) { mk.style.left = rc.x + rc.w / 2 + 'px'; mk.style.top = rc.y + rc.h / 2 + 'px'; }
+  }
+  const box = currentBox();
+  if (!box || !pickLayout) { els.sel.hidden = true; return; }
+  const L = pickLayout, m = current.model;
+  const r2 = Math.min(box.r2, L.r2), c2 = Math.min(box.c2, L.c2);
+  const x = L.offX + L.xs[box.c1], y = L.offY + L.ys[box.r1];
+  Object.assign(els.sel.style, {
+    left: x + 'px', top: y + 'px',
+    width: L.xs[c2] + colWidth(m, c2) - L.xs[box.c1] + 'px',
+    height: L.ys[r2] + rowHeight(m, r2) - L.ys[box.r1] + 'px',
+  });
+  els.sel.hidden = box.r1 > L.r2 || box.c1 > L.c2;
+}
+
+function currentBox() {
+  const a = corners.p1, b = corners.p2;
+  if (!a || !b || !current?.model) return null;
+  const m = current.model;
+  return {
+    r1: Math.min(a.r, b.r), c1: Math.min(a.c, b.c),
+    r2: Math.min(Math.max(a.r, b.r), m.rows - 1), c2: Math.min(Math.max(a.c, b.c), m.cols - 1),
+  };
+}
+
+function setCorner(k, p, fromInput = false) {
+  corners[k] = p;
+  if (!fromInput) els[k].value = p ? cellName(p) : '';
+  els[k].style.borderColor = '';
+  const L = pickLayout;
+  if (p && L && (p.r > L.r2 || p.c > L.c2) && p.r < PICK_MAX_ROWS && p.c < PICK_MAX_COLS) renderPicker();
+  else updateSelection();
   draw();
 }
 
 function draw() {
   if (!current?.model) return;
   const m = current.model;
-  const manual = els.range.value.trim();
-  let box;
-  if (manual) {
-    box = parseA1(manual);
-    if (!box) { setStatus('범위 형식이 올바르지 않아요. 예: A1:F20', 'err'); return; }
-    box.r2 = Math.min(box.r2, m.rows - 1); box.c2 = Math.min(box.c2, m.cols - 1);
-    if (box.r1 > box.r2 || box.c1 > box.c2) { setStatus('지정한 범위가 시트 밖이에요.', 'err'); return; }
-  } else {
-    box = detect(m, opt.detect);
-    if (!box) { els.result.hidden = true; setStatus('내용이 있는 셀을 찾지 못했어요.', 'err'); return; }
+  const box = currentBox();
+  if (!box) {
+    els.result.hidden = true;
+    setStatus(corners.p1 || corners.p2 ? '나머지 모서리 하나를 더 찍어 주세요.' : '뽑을 범위의 양 끝 모서리 두 칸을 찍어 주세요.', 'note');
+    return;
   }
+  if (box.r1 > box.r2 || box.c1 > box.c2) { els.result.hidden = true; setStatus('찍은 칸이 시트 밖이에요.', 'err'); return; }
   current.box = box;
   let res;
   try {
@@ -781,7 +992,7 @@ function draw() {
   } catch (e) { setStatus(e.message, 'err'); return; }
   els.result.hidden = false;
   const reduced = res.scale < opt.scale;
-  els.info.textContent = `${manual ? '지정' : '감지'} 범위 ${boxA1(box)} · ${res.W.toLocaleString()} × ${res.H.toLocaleString()}px · ${reduced ? `크기 제한으로 ${res.scale}배` : opt.scale + '배'}`;
+  els.info.textContent = `범위 ${boxA1(box)} ·${res.W.toLocaleString()} × ${res.H.toLocaleString()}px · ${reduced ? `크기 제한으로 ${res.scale}배` : opt.scale + '배'}`;
   if (current.mode === 'simple') setStatus('간편 모드: 값만 가져와서 색·테두리·글꼴·병합은 빠져 있어요. API 키를 넣으면 서식까지 그대로 나와요.', 'note');
   else setStatus('');
 }
@@ -811,8 +1022,50 @@ function segment(id, key, parse) {
   });
 }
 segment('#scaleSeg', 'scale', Number);
-segment('#detectSeg', 'detect', String);
-els.range.addEventListener('change', draw);
+
+for (const k of ['p1', 'p2']) {
+  els[k].addEventListener('input', () => {
+    const v = els[k].value.trim();
+    if (!v) { setCorner(k, null, true); return; }
+    const p = parseCell(v);
+    if (p) setCorner(k, p, true);
+    else els[k].style.borderColor = 'var(--err)';
+  });
+  els[k].addEventListener('blur', () => { if (corners[k]) els[k].value = cellName(corners[k]); });
+}
+els.pickWrap.addEventListener('pointerup', (e) => {
+  if (e.button !== 0) return;
+  const p = cellAt(e); if (!p) return;
+  if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+    setCorner(nextTouch, p); nextTouch = nextTouch === 'p1' ? 'p2' : 'p1';
+  } else setCorner('p1', p);
+});
+els.pickWrap.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  const p = cellAt(e); if (p) setCorner('p2', p);
+});
+els.pickWrap.addEventListener('pointermove', (e) => {
+  const p = e.pointerType === 'mouse' ? cellAt(e) : null;
+  els.hoverTip.hidden = !p;
+  if (!p) return;
+  const wr = els.pickWrap.getBoundingClientRect();
+  els.hoverTip.textContent = cellName(p);
+  els.hoverTip.style.left = e.clientX - wr.left + 14 + 'px';
+  els.hoverTip.style.top = e.clientY - wr.top + 16 + 'px';
+});
+els.pickWrap.addEventListener('pointerleave', () => { els.hoverTip.hidden = true; });
+$('#autoPick').addEventListener('click', () => {
+  if (!current?.model) return;
+  const b = detect(current.model, 'smart');
+  if (!b) { setStatus('내용이 있는 셀을 찾지 못했어요. 직접 찍어 주세요.', 'err'); return; }
+  corners.p1 = { r: b.r1, c: b.c1 }; corners.p2 = { r: b.r2, c: b.c2 };
+  els.p1.value = cellName(corners.p1); els.p2.value = cellName(corners.p2);
+  updateSelection(); draw();
+});
+$('#clearPick').addEventListener('click', () => {
+  corners.p1 = corners.p2 = null; els.p1.value = els.p2.value = ''; nextTouch = 'p1';
+  updateSelection(); draw();
+});
 els.margin.addEventListener('input', draw);
 els.grid.addEventListener('change', draw);
 els.transparent.addEventListener('change', draw);
